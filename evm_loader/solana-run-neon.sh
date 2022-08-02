@@ -37,8 +37,12 @@ fi
 
 NEON_VALIDATOR_ARGS=(
     --gossip-host $(hostname -i)
-    --geyser-plugin-config /opt/accountsdb-plugin-config.json
 )
+
+if [[ -n $GEYSER_PLUGIN_CONFIG ]]; then
+  echo "Using geyser plugin with config: $GEYSER_PLUGIN_CONFIG"
+  NEON_VALIDATOR_ARGS+=(--geyser-plugin-config $GEYSER_PLUGIN_CONFIG)
+fi
 
 export SOLANA_RUN_SH_GENESIS_ARGS="${NEON_BPF_ARGS[@]}"
 export SOLANA_RUN_SH_VALIDATOR_ARGS="${NEON_VALIDATOR_ARGS[@]}"

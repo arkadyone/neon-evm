@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "Neon EVM revision=${BUILDKITE_COMMIT}"
 
-set ${SOLANA_IMAGE:=neonlabsorg/solana:v1.11.1-dumper-plugin}
+set ${SOLANA_IMAGE:=neonlabsorg/solana:v1.11.3-dumper-plugin}
 
 docker pull ${SOLANA_IMAGE}
 echo "SOLANA_IMAGE=$SOLANA_IMAGE"
