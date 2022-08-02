@@ -47,4 +47,4 @@ fi
 export SOLANA_RUN_SH_GENESIS_ARGS="${NEON_BPF_ARGS[@]}"
 export SOLANA_RUN_SH_VALIDATOR_ARGS="${NEON_VALIDATOR_ARGS[@]}"
 
-/opt/solana/bin/run.sh
+./solana-run.sh

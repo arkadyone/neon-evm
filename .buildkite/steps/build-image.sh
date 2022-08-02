@@ -3,9 +3,9 @@ set -euo pipefail
 
 echo "Neon EVM revision=${BUILDKITE_COMMIT}"
 
-set ${SOLANA_IMAGE:=neonlabsorg/solana:v1.11.3-dumper-plugin}
+set ${SOLANA_REVISION:=v1.10.30}
 
-docker pull ${SOLANA_IMAGE}
-echo "SOLANA_IMAGE=$SOLANA_IMAGE"
+docker pull solanalabs/solana:${SOLANA_REVISION}
+echo "SOLANA_REVISION=$SOLANA_REVISION"
 
-docker build --build-arg REVISION=${BUILDKITE_COMMIT} --build-arg SOLANA_IMAGE=$SOLANA_IMAGE -t neonlabsorg/evm_loader:${BUILDKITE_COMMIT} .
+docker build --build-arg REVISION=${BUILDKITE_COMMIT} --build-arg SOLANA_REVISION=$SOLANA_REVISION -t neonlabsorg/evm_loader:${BUILDKITE_COMMIT} .
