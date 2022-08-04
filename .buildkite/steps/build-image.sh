@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "Neon EVM revision=${BUILDKITE_COMMIT}"
 
-set ${SOLANA_REVISION:=ci-many-accounts}
+set ${SOLANA_REVISION:=ci-many-accounts-big-log-limit}
 
 docker pull neonlabsorg/solana:${SOLANA_REVISION}
 echo "SOLANA_REVISION=$SOLANA_REVISION"
