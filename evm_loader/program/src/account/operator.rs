@@ -1,4 +1,4 @@
-use crate::error::EvmLoaderError;
+// use crate::error::EvmLoaderError;
 use solana_program::account_info::AccountInfo;
 use solana_program::program_error::ProgramError;
 use std::ops::Deref;
