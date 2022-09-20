@@ -9,13 +9,13 @@ pub struct Operator<'a> {
 
 impl<'a> Operator<'a> {
     pub fn from_account(info: &'a AccountInfo<'a>) -> Result<Self, ProgramError> {
-        let is_authorized = crate::config::AUTHORIZED_OPERATOR_LIST
-            .iter()
-            .any(|&item| item == *info.key);
-
-        if !is_authorized {
-            return Err!(EvmLoaderError::UnauthorizedOperator.into(); "Account {} - expected authorized operator", info.key);
-        }
+        // let is_authorized = crate::config::AUTHORIZED_OPERATOR_LIST
+        //     .iter()
+        //     .any(|&item| item == *info.key);
+        //
+        // if !is_authorized {
+        //     return Err!(EvmLoaderError::UnauthorizedOperator.into(); "Account {} - expected authorized operator", info.key);
+        // }
 
         unsafe { Self::from_account_not_whitelisted(info) }
     }
