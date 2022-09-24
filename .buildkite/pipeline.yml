@@ -23,8 +23,6 @@ steps:
     artifact_paths:
       - "solana.log"
 
-  - wait
-
   - label: ":docker: Up dynamic proxy-model pipeline"
     env:
       PROXY_BRANCH: ${PROXY_BRANCH:-"285-merging-contract-entities"}
