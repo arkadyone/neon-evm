@@ -1,6 +1,8 @@
 ARG SOLANA_IMAGE
 # Install BPF SDK
 FROM solanalabs/rust:1.64.0 AS builder
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    cargo install rustfilt
 WORKDIR /opt
 ARG SOLANA_REVISION
 # TODO: make connection insecure to solve with expired certificate
@@ -16,7 +18,8 @@ COPY ./evm_loader/ /opt/evm_loader/
 WORKDIR /opt/evm_loader
 ARG REVISION
 ENV NEON_REVISION=${REVISION}
-RUN cargo clippy --release && \
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    cargo clippy --release && \
     cargo build --release && \
     cargo build-sbf --arch bpf --features no-logs,devnet && cp target/deploy/evm_loader.so target/deploy/evm_loader-devnet.so && \
     cargo build-sbf --arch bpf --features no-logs,testnet && cp target/deploy/evm_loader.so target/deploy/evm_loader-testnet.so && \
@@ -25,7 +28,7 @@ RUN cargo clippy --release && \
     cargo build-sbf --arch bpf --features no-logs,govertest,emergency && cp target/deploy/evm_loader.so target/deploy/evm_loader-govertest-emergency.so && \
     cargo build-sbf --arch bpf --features no-logs,mainnet && cp target/deploy/evm_loader.so target/deploy/evm_loader-mainnet.so && \
     cargo build-sbf --arch bpf --features no-logs,mainnet,emergency && cp target/deploy/evm_loader.so target/deploy/evm_loader-mainnet-emergency.so && \
-    cargo build-sbf --arch bpf --features no-logs
+    cargo build-sbf --arch bpf --features no-logs --dump
 
 # Build Solidity contracts
 FROM ethereum/solc:0.8.0 AS solc
@@ -75,6 +78,7 @@ COPY evm_loader/solana-run-neon.sh \
      /opt/solana/bin/
 
 COPY --from=evm-loader-builder /opt/evm_loader/target/deploy/evm_loader*.so /opt/
+COPY --from=evm-loader-builder /opt/evm_loader/target/deploy/evm_loader-dump.txt /opt/
 COPY --from=evm-loader-builder /opt/evm_loader/target/release/neon-cli /opt/
 COPY --from=solana /usr/bin/spl-token /opt/spl-token
 COPY --from=contracts /opt/ /opt/solidity/

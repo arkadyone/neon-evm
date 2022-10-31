@@ -12,7 +12,6 @@ mod commands;
 use crate::{
     account_storage::{
         make_solana_program_address,
-        account_info,
     },
     commands::{
         emulate,
@@ -29,12 +28,10 @@ use crate::{
 };
 
 use evm_loader::{
-    account::{
-        EthereumAccount,
-    },
+    types::Address
 };
 
-use evm::{H160, H256, U256};
+use ethnum::U256;
 use solana_sdk::{
     commitment_config::{CommitmentConfig, CommitmentLevel},
     instruction::{Instruction},
@@ -71,9 +68,7 @@ use solana_client::{
     client_error::Result as SolanaClientResult,
 };
 
-use rlp::RlpStream;
-
-use log::{ debug, error};
+use log::{error};
 use logs::LogContext;
 
 use crate::errors::NeonCliError;
@@ -112,106 +107,6 @@ pub fn read_program_data(program_location: &str) -> Result<Vec<u8>, NeonCliError
     Ok(program_data)
 }
 
-#[must_use]
-pub fn keccak256_h256(data: &[u8]) -> H256 {
-    let hash = solana_sdk::keccak::hash(data).to_bytes();
-    H256::from(hash)
-}
-
-#[must_use]
-pub fn keccak256(data: &[u8]) -> [u8; 32] {
-    solana_sdk::keccak::hash(data).to_bytes()
-}
-
-#[must_use]
-pub fn keccak256_digest(data: &[u8]) -> Vec<u8> {
-    solana_sdk::keccak::hash(data).to_bytes().to_vec()
-}
-
-#[derive(Debug)]
-pub struct UnsignedTransaction {
-    pub nonce: u64,
-    pub gas_price: U256,
-    pub gas_limit: U256,
-    pub to: Option<H160>,
-    pub value: U256,
-    pub data: Vec<u8>,
-    pub chain_id: U256,
-}
-
-impl rlp::Encodable for UnsignedTransaction {
-    fn rlp_append(&self, s: &mut RlpStream) {
-        s.begin_list(9);
-        s.append(&self.nonce);
-        s.append(&self.gas_price);
-        s.append(&self.gas_limit);
-        match self.to.as_ref() {
-            None => s.append(&""),
-            Some(addr) => s.append(addr),
-        };
-        s.append(&self.value);
-        s.append(&self.data);
-        s.append(&self.chain_id);
-        s.append_empty_data();
-        s.append_empty_data();
-    }
-}
-
-// fn get_ethereum_caller_credentials(
-//     config: &Config,
-// ) -> (SecretKey, H160, Pubkey, u8, Pubkey, Pubkey) {
-//     use secp256k1::PublicKey;
-//     let caller_private = {
-//         let private_bytes : [u8; 64] = config.keypair.as_ref().unwrap().to_bytes();
-//         let mut sign_arr: [u8;32] = Default::default();
-//         sign_arr.clone_from_slice(&private_bytes[..32]);
-//         SecretKey::parse(&sign_arr).unwrap()
-//     };
-//     let caller_public = PublicKey::from_secret_key(&caller_private);
-//     let caller_ether: H160 = keccak256_h256(&caller_public.serialize()[1..]).into();
-//     let (caller_sol, caller_nonce) = make_solana_program_address(&caller_ether, &config.evm_loader);
-//     let caller_token = spl_associated_token_account::get_associated_token_address(&caller_sol, &evm_loader::neon::token_mint::id());
-//     let caller_holder = create_block_token_account(config, &caller_ether, &caller_sol).unwrap();
-//     debug!("caller_sol = {}", caller_sol);
-//     debug!("caller_ether = {}", caller_ether);
-//     debug!("caller_token = {}", caller_token);
-
-//     (caller_private, caller_ether, caller_sol, caller_nonce, caller_token, caller_holder)
-// }
-
-fn get_ether_account_nonce(
-    config: &Config,
-    caller_sol: &Pubkey,
-) -> Result<(u64, H160), NeonCliError> {
-    let mut acc = match config.rpc_client.get_account_with_commitment(caller_sol, CommitmentConfig::confirmed())?.value {
-        Some(acc) => acc,
-        None => return Ok((u64::default(), H160::default()))
-    };
-
-    debug!("get_ether_account_nonce account = {:?}", acc);
-
-    let info = account_info(caller_sol, &mut acc);
-    let account = EthereumAccount::from_account(&config.evm_loader, &info).map_err(NeonCliError::ProgramError)?;
-    let trx_count = account.trx_count;
-    let caller_ether = account.address;
-
-    debug!("Caller: ether {}, solana {}", caller_ether, caller_sol);
-    debug!("Caller trx_count: {} ", trx_count);
-
-    Ok((trx_count, caller_ether))
-}
-
-fn get_program_ether(
-    caller_ether: &H160,
-    trx_count: u64
-) -> H160 {
-    let trx_count_256 : U256 = U256::from(trx_count);
-    let mut stream = rlp::RlpStream::new_list(2);
-    stream.append(caller_ether);
-    stream.append(&trx_count_256);
-    keccak256_h256(&stream.out()).into()
-}
-
 
 fn send_transaction(
     config: &Config,
@@ -245,51 +140,61 @@ fn make_clean_hex(in_str: &str) -> &str {
     }
 }
 
-// Return H160 for an argument
-fn h160_or_deploy_of(matches: &ArgMatches<'_>, name: &str) -> Option<H160> {
+// Return Address for an argument
+fn address_or_deploy_of(matches: &ArgMatches<'_>, name: &str) -> Option<Address> {
     if matches.value_of(name) == Some("deploy") {
         return None;
     }
     matches.value_of(name).map(|value| {
-        H160::from_str(make_clean_hex(value)).unwrap()
+        Address::from_hex(make_clean_hex(value)).unwrap()
     })
 }
 
-// Return an error if string cannot be parsed as a H160 address
-fn is_valid_h160_or_deploy<T>(string: T) -> Result<(), String> where T: AsRef<str>,
+// Return an error if string cannot be parsed as a Address address
+fn is_valid_address_or_deploy<T>(string: T) -> Result<(), String> where T: AsRef<str>,
 {
     if string.as_ref() == "deploy" {
         return Ok(());
     }
-    H160::from_str(make_clean_hex(string.as_ref())).map(|_| ())
+    Address::from_hex(make_clean_hex(string.as_ref())).map(|_| ())
         .map_err(|e| e.to_string())
 }
 
-// Return H160 for an argument
-fn h160_of(matches: &ArgMatches<'_>, name: &str) -> Option<H160> {
+// Return Address for an argument
+fn address_of(matches: &ArgMatches<'_>, name: &str) -> Option<Address> {
     matches.value_of(name).map(|value| {
-        H160::from_str(make_clean_hex(value)).unwrap()
+        Address::from_hex(make_clean_hex(value)).unwrap()
     })
 }
 
 // Return U256 for an argument
 fn u256_of(matches: &ArgMatches<'_>, name: &str) -> Option<U256> {
     matches.value_of(name).map(|value| {
-        U256::from_str(make_clean_hex(value)).unwrap()
+        if value.is_empty() {
+            return U256::ZERO;
+        }
+
+        U256::from_str_prefixed(value).unwrap()
     })
 }
 
-// Return an error if string cannot be parsed as a H160 address
-fn is_valid_h160<T>(string: T) -> Result<(), String> where T: AsRef<str>,
+// Return an error if string cannot be parsed as a Address address
+fn is_valid_address<T>(string: T) -> Result<(), String> where T: AsRef<str>,
 {
-    H160::from_str(make_clean_hex(string.as_ref())).map(|_| ())
+    Address::from_hex(make_clean_hex(string.as_ref())).map(|_| ())
         .map_err(|e| e.to_string())
 }
 
 // Return an error if string cannot be parsed as a U256 integer
 fn is_valid_u256<T>(string: T) -> Result<(), String> where T: AsRef<str>,
 {
-    U256::from_str(make_clean_hex(string.as_ref())).map(|_| ())
+    let value = string.as_ref();
+    if value.is_empty() {
+        return Ok(());
+    }
+
+    U256::from_str_prefixed(value)
+        .map(|_| ())
         .map_err(|e| e.to_string())
 }
 
@@ -449,7 +354,7 @@ fn main() {
                         .takes_value(true)
                         .index(1)
                         .required(true)
-                        .validator(is_valid_h160)
+                        .validator(is_valid_address)
                         .help("The sender of the transaction")
                 )
                 .arg(
@@ -458,7 +363,7 @@ fn main() {
                         .takes_value(true)
                         .index(2)
                         .required(true)
-                        .validator(is_valid_h160_or_deploy)
+                        .validator(is_valid_address_or_deploy)
                         .help("The contract that executes the transaction or 'deploy'")
                 )
                 .arg(
@@ -467,7 +372,7 @@ fn main() {
                         .takes_value(true)
                         .index(3)
                         .required(false)
-                        .validator(is_amount::<U256, _>)
+                        .validator(is_valid_u256)
                         .help("Transaction value")
                 )
                 .arg(
@@ -506,7 +411,7 @@ fn main() {
                         .value_name("ether")
                         .takes_value(true)
                         .required(true)
-                        .validator(is_valid_h160)
+                        .validator(is_valid_address)
                         .help("Ethereum address"),
                 )
             )
@@ -540,7 +445,7 @@ fn main() {
                         .value_name("ETHER")
                         .takes_value(true)
                         .required(true)
-                        .validator(is_valid_h160)
+                        .validator(is_valid_address)
                         .help("Ethereum address"),
                 )
         )
@@ -553,7 +458,7 @@ fn main() {
                         .value_name("ether")
                         .takes_value(true)
                         .required(true)
-                        .validator(is_valid_h160)
+                        .validator(is_valid_address)
                         .help("Ethereum address"),
                 )
         )
@@ -624,7 +529,7 @@ fn main() {
                         .index(1)
                         .value_name("contract_id")
                         .takes_value(true)
-                        .validator(is_valid_h160)
+                        .validator(is_valid_address)
                         .required(true),
                 )
                 .arg(
@@ -717,10 +622,10 @@ fn main() {
     let result: NeonCliResult =
         match (sub_command, sub_matches) {
             ("emulate", Some(arg_matches)) => {
-                let contract = h160_or_deploy_of(arg_matches, "contract");
-                let sender = h160_of(arg_matches, "sender").unwrap();
+                let contract = address_or_deploy_of(arg_matches, "contract");
+                let sender = address_of(arg_matches, "sender").unwrap();
                 let data = read_stdin();
-                let value = value_of(arg_matches, "value");
+                let value = u256_of(arg_matches, "value");
 
                 // Read ELF params only if token_mint or chain_id is not set.
                 let mut token_mint = pubkey_of(arg_matches, "token_mint");
@@ -748,21 +653,21 @@ fn main() {
                                  max_steps_to_execute)
             }
             ("create-program-address", Some(arg_matches)) => {
-                let ether = h160_of(arg_matches, "seed").unwrap();
+                let ether = address_of(arg_matches, "seed").unwrap();
                 create_program_address::execute(&config, &ether);
                 Ok(())
             }
             ("create-ether-account", Some(arg_matches)) => {
-                let ether = h160_of(arg_matches, "ether").unwrap();
+                let ether = address_of(arg_matches, "ether").unwrap();
                 create_ether_account::execute(&config, &ether)
             }
             ("deposit", Some(arg_matches)) => {
                 let amount = value_of(arg_matches, "amount").unwrap();
-                let ether = h160_of(arg_matches, "ether").unwrap();
+                let ether = address_of(arg_matches, "ether").unwrap();
                 deposit::execute(&config, amount, &ether)
             }
             ("get-ether-account-data", Some(arg_matches)) => {
-                let ether = h160_of(arg_matches, "ether").unwrap();
+                let ether = address_of(arg_matches, "ether").unwrap();
                 get_ether_account_data::execute(&config, &ether);
                 Ok(())
             }
@@ -785,7 +690,7 @@ fn main() {
                 init_environment::execute(&config, send_trx, force, keys_dir, file)
             }
             ("get-storage-at", Some(arg_matches)) => {
-                let contract_id = h160_of(arg_matches, "contract_id").unwrap();
+                let contract_id = address_of(arg_matches, "contract_id").unwrap();
                 let index = u256_of(arg_matches, "index").unwrap();
                 get_storage_at::execute(&config, contract_id, &index);
                 Ok(())
@@ -802,6 +707,5 @@ fn main() {
                 error_code as i32
             }
         };
-    
     exit(exit_code)
 }

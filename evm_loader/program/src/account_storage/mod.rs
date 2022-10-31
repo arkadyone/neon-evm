@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::account::{EthereumAccount, ACCOUNT_SEED_VERSION};
 use crate::executor::{Action, OwnedAccountInfo, OwnedAccountInfoPartial};
-use evm::{H160, H256, U256};
+use crate::types::Address;
+use ethnum::U256;
 use solana_program::{ pubkey::Pubkey };
 use solana_program::account_info::AccountInfo;
 use solana_program::clock::Clock;
@@ -23,7 +24,7 @@ pub enum AccountOperation {
     },
 }
 
-pub type AccountsOperations = Vec<(H160, AccountOperation)>;
+pub type AccountsOperations = Vec<(Address, AccountOperation)>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum AccountsReadiness {
@@ -37,8 +38,8 @@ pub struct ProgramAccountStorage<'a> {
     clock: Clock,
 
     solana_accounts: BTreeMap<Pubkey, &'a AccountInfo<'a>>,
-    ethereum_accounts: BTreeMap<H160, EthereumAccount<'a>>,
-    empty_ethereum_accounts: RefCell<BTreeSet<H160>>,
+    ethereum_accounts: BTreeMap<Address, EthereumAccount<'a>>,
+    empty_ethereum_accounts: RefCell<BTreeSet<Address>>,
 }
 
 /// Account storage
@@ -58,41 +59,37 @@ pub trait AccountStorage {
     /// Get block timestamp
     fn block_timestamp(&self) -> U256;
     /// Get block hash
-    fn block_hash(&self, number: U256) -> H256;
+    fn block_hash(&self, number: U256) -> [u8; 32];
     /// Get chain id
     fn chain_id(&self) -> u64;
 
     /// Check if ethereum account exists
-    fn exists(&self, address: &H160) -> bool;
+    fn exists(&self, address: &Address) -> bool;
     /// Get account nonce
-    fn nonce(&self, address: &H160) -> U256;
+    fn nonce(&self, address: &Address) -> u64;
     /// Get account balance
-    fn balance(&self, address: &H160) -> U256;
+    fn balance(&self, address: &Address) -> U256;
 
     /// Get code size
-    fn code_size(&self, address: &H160) -> usize;
+    fn code_size(&self, address: &Address) -> usize;
     /// Get code hash
-    fn code_hash(&self, address: &H160) -> H256;
+    fn code_hash(&self, address: &Address) -> [u8; 32];
     /// Get code data
-    fn code(&self, address: &H160) -> Vec<u8>;
-    /// Get valids data
-    fn valids(&self, address: &H160) -> Vec<u8>;
+    fn code(&self, address: &Address) -> Vec<u8>;
     /// Get contract generation
-    fn generation(&self, address: &H160) -> u32;
+    fn generation(&self, address: &Address) -> u32;
 
     /// Get storage account address and bump seed
-    fn get_storage_address(&self, address: &H160, index: &U256) -> (Pubkey, u8) {
+    fn get_storage_address(&self, address: &Address, index: &U256) -> (Pubkey, u8) {
         let generation_bytes = self.generation(address).to_le_bytes();
-
-        let mut index_bytes = [0_u8; 32];
-        index.to_little_endian(&mut index_bytes);
+        let index_bytes = index.to_le_bytes();
 
         let seeds: &[&[u8]] = &[&[ACCOUNT_SEED_VERSION], b"ContractStorage", address.as_bytes(), &generation_bytes, &index_bytes];
         Pubkey::find_program_address(seeds, self.program_id())
     }
 
     /// Get data from storage
-    fn storage(&self, address: &H160, index: &U256) -> U256;
+    fn storage(&self, address: &Address, index: &U256) -> [u8; 32];
 
     /// Clone existing solana account
     fn clone_solana_account(&self, address: &Pubkey) -> OwnedAccountInfo;
@@ -100,18 +97,13 @@ pub trait AccountStorage {
     /// Clone part of existing solana account
     fn clone_solana_account_partial(&self, address: &Pubkey, offset: usize, len: usize) -> Option<OwnedAccountInfoPartial>;
 
-    /// Calculate account solana address and bump seed
-    fn calc_solana_address(&self, address: &H160) -> (Pubkey, u8) {
-        Pubkey::find_program_address(&[&[ACCOUNT_SEED_VERSION], address.as_bytes()], self.program_id())
-    }
-
     /// Resolve account solana address and bump seed
-    fn solana_address(&self, address: &H160) -> (Pubkey, u8) {
-        self.calc_solana_address(address)
+    fn solana_address(&self, address: &Address) -> (Pubkey, u8) {
+        address.find_solana_address(self.program_id())
     }
 
     /// Solana account data len
-    fn solana_account_space(&self, address: &H160) -> Option<usize>;
+    fn solana_account_space(&self, address: &Address) -> Option<usize>;
 
     fn calc_accounts_operations(
         &self,

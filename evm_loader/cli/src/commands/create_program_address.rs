@@ -1,4 +1,4 @@
-use evm::{H160};
+use evm_loader::types::Address;
 
 use crate::{
     Config,
@@ -6,9 +6,9 @@ use crate::{
 
 pub fn execute (
     config: &Config,
-    ether_address: &H160,
+    ether_address: &Address,
 ) {
-    let (solana_address, nonce) = crate::make_solana_program_address(ether_address, &config.evm_loader);
+    let (solana_address, nonce) = ether_address.find_solana_address(&config.evm_loader);
     println!("{} {}", solana_address, nonce);
 }
 

@@ -1,6 +1,5 @@
 use std::cell::{RefCell};
 use std::collections::{BTreeMap, BTreeSet};
-use evm::{H160};
 use solana_program::account_info::AccountInfo;
 use solana_program::clock::Clock;
 use solana_program::program_error::ProgramError;
@@ -9,6 +8,7 @@ use solana_program::system_program;
 use solana_program::sysvar::Sysvar;
 use crate::account::{EthereumAccount, Operator, program, TAG_EMPTY};
 use crate::account_storage::{AccountStorage, ProgramAccountStorage};
+use crate::types::Address;
 
 
 impl<'a> ProgramAccountStorage<'a> {
@@ -60,7 +60,7 @@ impl<'a> ProgramAccountStorage<'a> {
         })
     }
 
-    pub(crate) fn panic_if_account_not_exists(&self, address: &H160) {
+    pub(crate) fn panic_if_account_not_exists(&self, address: &Address) {
         if self.ethereum_accounts.contains_key(address) {
             return;
         }
@@ -70,7 +70,7 @@ impl<'a> ProgramAccountStorage<'a> {
             return;
         }
 
-        let (solana_address, _bump_seed) = self.calc_solana_address(address);
+        let (solana_address, _bump_seed) = address.find_solana_address(self.program_id);
         if let Some(account) = self.solana_accounts.get(&solana_address) {
             assert!(
                 self.is_account_empty(account),
@@ -93,12 +93,12 @@ impl<'a> ProgramAccountStorage<'a> {
         self.solana_accounts.get(solana_address).copied()
     }
 
-    pub fn ethereum_account(&self, address: &H160) -> Option<&EthereumAccount<'a>> {
+    pub fn ethereum_account(&self, address: &Address) -> Option<&EthereumAccount<'a>> {
         self.panic_if_account_not_exists(address);
         self.ethereum_accounts.get(address)
     }
 
-    pub fn ethereum_account_mut(&mut self, address: &H160) -> &mut EthereumAccount<'a> {
+    pub fn ethereum_account_mut(&mut self, address: &Address) -> &mut EthereumAccount<'a> {
         self.ethereum_accounts.get_mut(address).unwrap() // mutable accounts always present
     }
 

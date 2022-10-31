@@ -8,11 +8,11 @@ use solana_sdk::{
     system_program,
 };
 
+use evm_loader::types::Address;
+
 use solana_cli::{
     checks::{check_account_for_fee},
 };
-
-use evm::{H160};
 
 use crate::{
     Config,
@@ -23,7 +23,7 @@ use crate::{
 pub fn execute(
     config: &Config,
     amount: u64,
-    ether_address: &H160,
+    ether_address: &Address,
 ) -> NeonCliResult {
     let (ether_pubkey, nonce) = crate::make_solana_program_address(ether_address, &config.evm_loader);
 
@@ -83,7 +83,7 @@ pub fn execute(
 
     info!("{}", serde_json::json!({
         "amount": amount,
-        "ether": hex::encode(ether_address),
+        "ether": ether_address,
         "nonce": nonce,
     }));
 
@@ -93,13 +93,13 @@ pub fn execute(
 /// Returns instruction for creation of account.
 fn create_ether_account_instruction(
     config: &Config,
-    ether_address: &H160,
+    ether_address: &Address,
     solana_address: Pubkey,
     nonce: u8,
 ) -> Instruction {
     Instruction::new_with_bincode(
         config.evm_loader,
-        &(0x1e_u8, ether_address.as_fixed_bytes(), nonce, 0_u32),
+        &(0x1e_u8, ether_address, nonce, 0_u32),
         vec![
             AccountMeta::new(config.signer.pubkey(), true),
             AccountMeta::new_readonly(system_program::id(), false),
@@ -137,12 +137,12 @@ fn deposit_instruction(
     config: &Config,
     source_pubkey: Pubkey,
     destination_pubkey: Pubkey,
-    ether_address: &H160,
+    ether_address: &Address,
     ether_account_pubkey: Pubkey,
 ) -> Instruction {
     Instruction::new_with_bincode(
         config.evm_loader,
-        &(0x27_u8, ether_address.as_fixed_bytes()),
+        &(0x27_u8, ether_address),
         vec![
             AccountMeta::new(source_pubkey, false),
             AccountMeta::new(destination_pubkey, false),

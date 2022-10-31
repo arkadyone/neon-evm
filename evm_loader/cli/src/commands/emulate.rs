@@ -1,7 +1,11 @@
-use log::{debug, info};
+use log::{debug};
 
-use evm::{H160, U256, ExitReason};
-use evm_loader::{executor::{Machine, LAMPORTS_PER_SIGNATURE}, config::{EVM_STEPS_MIN, PAYMENT_TO_TREASURE}};
+use ethnum::U256;
+use evm_loader::{
+    gasometer::LAMPORTS_PER_SIGNATURE, 
+    config::{EVM_STEPS_MIN, PAYMENT_TO_TREASURE},
+    types::{Address, Transaction}, executor::ExecutorState, evm::{Machine, ExitStatus}
+};
 
 use crate::{
     account_storage::{
@@ -9,18 +13,17 @@ use crate::{
     },
     Config,
     NeonCliResult,
-    syscall_stubs::Stubs,
+    syscall_stubs::Stubs, errors::NeonCliError,
 };
 
 use solana_sdk::pubkey::Pubkey;
 use evm_loader::account_storage::AccountStorage;
-use crate::{errors};
 
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 pub fn execute(
     config: &Config, 
-    contract_id: Option<H160>, 
-    caller_id: H160, 
+    contract_id: Option<Address>, 
+    caller_id: Address, 
     data: Option<Vec<u8>>,
     value: Option<U256>,
     token_mint: &Pubkey,
@@ -39,72 +42,33 @@ pub fn execute(
 
     let storage = EmulatorAccountStorage::new(config, *token_mint, chain_id);
 
-    let program_id = if let Some(program_id) = contract_id {
-        debug!("program_id to call: {}", program_id);
-        program_id
-    } else {
-        let (solana_address, _nonce) = crate::make_solana_program_address(&caller_id, &config.evm_loader);
-        let trx_count = crate::get_ether_account_nonce(config, &solana_address)?;
-        let trx_count= trx_count.0;
-        let program_id = crate::get_program_ether(&caller_id, trx_count);
-        debug!("program_id to deploy: {}", program_id);
-        program_id
+    let trx = Transaction {
+        nonce: storage.nonce(&caller_id),
+        gas_price: U256::ZERO,
+        gas_limit: U256::MAX,
+        target: contract_id,
+        value: value.unwrap_or_default(),
+        call_data: data.unwrap_or_default(),
+        chain_id: Some(chain_id.into()),
+        ..Transaction::default()
     };
 
-    let (exit_reason, result, actions, steps_executed) = {
-        let gas_limit = U256::from(999_999_999_999_u64);
-        let mut executor = Machine::new(caller_id, &storage)?;
-        debug!("Executor initialized");
+    let (exit_status, actions, steps_executed) = {
+        let mut backend = ExecutorState::new(&storage);
+        let mut evm = Machine::new(trx, caller_id, &mut backend)?;
 
-        let (result, exit_reason) = match &contract_id {
-            Some(_) =>  {
-                debug!("call_begin(caller_id={:?}, program_id={:?}, data={:?}, value={:?})",
-                    caller_id,
-                    program_id,
-                    &hex::encode(data.clone().unwrap_or_default()),
-                    value);
-
-                executor.call_begin(caller_id,
-                    program_id,
-                    data.unwrap_or_default(),
-                    value.unwrap_or_default(),
-                    gas_limit, U256::zero())?;
-                match executor.execute_n_steps(max_steps_to_execute){
-                    Ok(()) => {
-                        info!("too many steps");
-                        return Err(errors::NeonCliError::TooManySteps)
-                    },
-                    Err(result) => result
-                }
-            },
-            None => {
-                debug!("create_begin(caller_id={:?}, data={:?}, value={:?})",
-                    caller_id,
-                    &hex::encode(data.clone().unwrap_or_default()),
-                    value);
-                executor.create_begin(
-                    caller_id,
-                    data.unwrap_or_default(),
-                    value.unwrap_or_default(),
-                    gas_limit,
-                    U256::zero(),
-                )?;
-                match executor.execute_n_steps(max_steps_to_execute){
-                    Ok(()) => {
-                        info!("too many steps");
-                        return Err(errors::NeonCliError::TooManySteps)
-                    },
-                    Err(result) => result
-                }
-            }
-        };
-        let steps_executed = executor.get_steps_executed();
-        debug!("Execute done, exit_reason={:?}, result={:?}", exit_reason, result);
-        debug!("{} steps executed", steps_executed);
-
-        let actions = executor.into_state_actions();
-        (exit_reason, result, actions, steps_executed)
+        let (result, steps_executed) = evm.execute(max_steps_to_execute, &mut backend)?;
+        let actions = backend.into_actions();
+        (result, actions, steps_executed)
     };
+
+    debug!("Execute done, result={exit_status:?}");
+    debug!("{steps_executed} steps executed");
+
+    if exit_status == ExitStatus::StepLimit {
+        return Err(NeonCliError::TooManySteps);
+    }
+
 
     let accounts_operations = storage.calc_accounts_operations(&actions);
 
@@ -115,17 +79,12 @@ pub fn execute(
     let accounts_gas = storage.apply_accounts_operations(accounts_operations);
     debug!("Gas - steps: {steps_gas}, actions: {actions_gas}, accounts: {accounts_gas}");
 
-    debug!("Call done");
-    let status = match exit_reason {
-        ExitReason::Succeed(_) => "succeed".to_string(),
-        ExitReason::Error(_) => "error".to_string(),
-        ExitReason::Revert(_) => "revert".to_string(),
-        ExitReason::Fatal(_) => "fatal".to_string(),
-        ExitReason::StepLimitReached => unreachable!(),
+    let (result, status) = match exit_status {
+        ExitStatus::Return(v) => (v, "succeed"),
+        ExitStatus::Revert(v) => (v, "revert"),
+        ExitStatus::Stop | ExitStatus::Suicide => (vec![], "succeed"),
+        ExitStatus::StepLimit => unreachable!(),
     };
-
-    info!("{}", status);
-    info!("{}", hex::encode(&result));
 
     let accounts: Vec<NeonAccount> = storage.accounts
         .borrow()
@@ -145,7 +104,6 @@ pub fn execute(
         "token_accounts": [],
         "result": hex::encode(result),
         "exit_status": status,
-        "exit_reason": exit_reason,
         "steps_executed": steps_executed,
         "used_gas": steps_gas + begin_end_gas + actions_gas + accounts_gas
     });

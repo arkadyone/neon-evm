@@ -1,5 +1,6 @@
+use std::convert::TryInto;
+
 use super::{program, EthereumStorage, Operator, Packable};
-use evm::U256;
 use solana_program::{program_error::ProgramError, rent::Rent, sysvar::Sysvar};
 
 /// Ethereum storage data account
@@ -24,7 +25,7 @@ impl Packable for Data {
 
 impl<'a> EthereumStorage<'a> {
     #[must_use]
-    pub fn get(&self, subindex: u8) -> U256 {
+    pub fn get(&self, subindex: u8) -> [u8; 32] {
         let data = self.info.data.borrow();
         let data = &data[1..]; // skip tag
 
@@ -33,17 +34,16 @@ impl<'a> EthereumStorage<'a> {
                 continue;
             }
 
-            let buffer = &chunk[1..];
-            return U256::from_big_endian_fast(buffer);
+            return chunk[1..].try_into().unwrap();
         }
 
-        U256::zero()
+        [0_u8; 32]
     }
 
     pub fn set(
         &mut self,
         subindex: u8,
-        value: U256,
+        value: &[u8; 32],
         operator: &Operator<'a>,
         system: &program::System<'a>,
     ) -> Result<(), ProgramError> {
@@ -56,8 +56,7 @@ impl<'a> EthereumStorage<'a> {
                     continue;
                 }
 
-                let buffer = &mut chunk[1..];
-                value.into_big_endian_fast(buffer);
+                chunk[1..].copy_from_slice(value);
 
                 return Ok(());
             }
@@ -79,7 +78,7 @@ impl<'a> EthereumStorage<'a> {
         let chunk = &mut data[chunk_start..];
 
         chunk[0] = subindex;
-        value.into_big_endian_fast(&mut chunk[1..]);
+        chunk[1..].copy_from_slice(value);
 
         Ok(())
     }

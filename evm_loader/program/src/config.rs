@@ -3,7 +3,6 @@
 
 use const_format::formatcp;
 use cfg_if::cfg_if;
-use evm::U256;
 use evm_loader_macro::{
     operators_whitelist,
     neon_elf_param,
@@ -791,10 +790,3 @@ neon_elf_param!( NEON_ADDITIONAL_FEE        , formatcp!("{:?}", REQUEST_UNITS_AD
 neon_elf_param!( NEON_GAS_LIMIT_MULTIPLIER_NO_CHAINID, formatcp!("{:?}", GAS_LIMIT_MULTIPLIER_NO_CHAINID));
 neon_elf_param!( NEON_STORAGE_ENTRIES_IN_CONTRACT_ACCOUNT, formatcp!("{:?}", STORAGE_ENTRIES_IN_CONTRACT_ACCOUNT));
 neon_elf_param!( NEON_EVM_STEPS_MIN, formatcp!("{:?}", EVM_STEPS_MIN));
-
-/// Chain ID
-#[must_use]
-pub fn chain_id() -> U256 {
-    U256::from(CHAIN_ID)
-}
-

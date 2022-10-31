@@ -11,7 +11,7 @@ use solana_cli::{
     checks::{check_account_for_fee},
 };
 
-use evm::{H160};
+use evm_loader::types::Address;
 
 use crate::{
     Config,
@@ -21,15 +21,15 @@ use crate::{
 
 pub fn execute (
     config: &Config,
-    ether_address: &H160,
+    ether_address: &Address,
 ) -> NeonCliResult {
 
-    let (solana_address, nonce) = crate::make_solana_program_address(ether_address, &config.evm_loader);
-    debug!("Create ethereum account {} <- {} {}", solana_address, hex::encode(ether_address), nonce);
+    let (solana_address, nonce) = ether_address.find_solana_address(&config.evm_loader);
+    debug!("Create ethereum account {solana_address} <- {ether_address} {nonce}");
 
     let create_account_v03_instruction = Instruction::new_with_bincode(
         config.evm_loader,
-        &(0x28_u8, ether_address.as_fixed_bytes()),
+        &(0x28_u8, ether_address),
         vec![
             AccountMeta::new(config.signer.pubkey(), true),
             AccountMeta::new_readonly(system_program::id(), false),
@@ -58,7 +58,7 @@ pub fn execute (
 
     info!("{}", serde_json::json!({
         "solana": solana_address.to_string(),
-        "ether": hex::encode(ether_address),
+        "ether": ether_address,
         "nonce": nonce,
     }));
 
