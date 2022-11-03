@@ -16,16 +16,17 @@ COPY ./evm_loader/ /opt/evm_loader/
 WORKDIR /opt/evm_loader
 ARG REVISION
 ENV NEON_REVISION=${REVISION}
-RUN cargo clippy --release && \
-    cargo build --release && \
-    cargo build-sbf --arch bpf --features no-logs,devnet && cp target/deploy/evm_loader.so target/deploy/evm_loader-devnet.so && \
-    cargo build-sbf --arch bpf --features no-logs,testnet && cp target/deploy/evm_loader.so target/deploy/evm_loader-testnet.so && \
-    cargo build-sbf --arch bpf --features no-logs,alpha && cp target/deploy/evm_loader.so target/deploy/evm_loader-alpha.so && \
-    cargo build-sbf --arch bpf --features no-logs,govertest && cp target/deploy/evm_loader.so target/deploy/evm_loader-govertest.so && \
-    cargo build-sbf --arch bpf --features no-logs,govertest,emergency && cp target/deploy/evm_loader.so target/deploy/evm_loader-govertest-emergency.so && \
-    cargo build-sbf --arch bpf --features no-logs,mainnet && cp target/deploy/evm_loader.so target/deploy/evm_loader-mainnet.so && \
-    cargo build-sbf --arch bpf --features no-logs,mainnet,emergency && cp target/deploy/evm_loader.so target/deploy/evm_loader-mainnet-emergency.so && \
-    cargo build-sbf --arch bpf --features no-logs
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/opt/evm_loader/target \
+    cargo clippy --release && \
+    cargo build --release && cp target/release/neon-cli ./ && \
+    cargo build-sbf --arch bpf --features no-logs,devnet && cp target/deploy/evm_loader.so ./evm_loader-devnet.so && \
+    cargo build-sbf --arch bpf --features no-logs,testnet && cp target/deploy/evm_loader.so ./evm_loader-testnet.so && \
+    cargo build-sbf --arch bpf --features no-logs,govertest && cp target/deploy/evm_loader.so ./evm_loader-govertest.so && \
+    cargo build-sbf --arch bpf --features no-logs,govertest,emergency && cp target/deploy/evm_loader.so ./evm_loader-govertest-emergency.so && \
+    cargo build-sbf --arch bpf --features no-logs,mainnet && cp target/deploy/evm_loader.so ./evm_loader-mainnet.so && \
+    cargo build-sbf --arch bpf --features no-logs,mainnet,emergency && cp target/deploy/evm_loader.so ./evm_loader-mainnet-emergency.so && \
+    cargo build-sbf --arch bpf --features no-logs && cp target/deploy/evm_loader.so ./evm_loader.so
 
 # Build Solidity contracts
 FROM ethereum/solc:0.8.0 AS solc
@@ -74,8 +75,8 @@ RUN /opt/solana/bin/solana program dump metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518
 COPY evm_loader/solana-run-neon.sh \
      /opt/solana/bin/
 
-COPY --from=evm-loader-builder /opt/evm_loader/target/deploy/evm_loader*.so /opt/
-COPY --from=evm-loader-builder /opt/evm_loader/target/release/neon-cli /opt/
+COPY --from=evm-loader-builder /opt/evm_loader/evm_loader*.so /opt/
+COPY --from=evm-loader-builder /opt/evm_loader/neon-cli /opt/
 COPY --from=solana /usr/bin/spl-token /opt/spl-token
 COPY --from=contracts /opt/ /opt/solidity/
 COPY --from=contracts /usr/bin/solc /usr/bin/solc

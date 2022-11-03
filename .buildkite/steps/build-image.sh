@@ -10,4 +10,4 @@ export SOLANA_IMAGE=${SOLANA_PROVIDER}/solana:${SOLANA_REVISION}
 echo "SOLANA_IMAGE=${SOLANA_IMAGE}"
 docker pull ${SOLANA_IMAGE}
 
-docker build --build-arg REVISION=${BUILDKITE_COMMIT} --build-arg SOLANA_IMAGE=${SOLANA_IMAGE} --build-arg SOLANA_REVISION=${SOLANA_REVISION} -t neonlabsorg/evm_loader:${BUILDKITE_COMMIT} .
+DOCKER_BUILDKIT=1 docker build --build-arg REVISION=${BUILDKITE_COMMIT} --build-arg SOLANA_IMAGE=${SOLANA_IMAGE} --build-arg SOLANA_REVISION=${SOLANA_REVISION} -t neonlabsorg/evm_loader:${BUILDKITE_COMMIT} .
