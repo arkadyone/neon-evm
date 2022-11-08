@@ -43,14 +43,14 @@ pub fn big_mod_exp(
 
     let return_value = solana_program::big_mod_exp::big_mod_exp(base_val, exp_val, mod_val);
 
-    let now = std::time::Instant::now();
+    // let now = std::time::Instant::now();
     #[cfg(target_arch = "bpf")]
     solana_program::log::sol_log_compute_units();
     assert_eq!(21_u64.pow(10), 16_679_880_978_201);
     #[cfg(target_arch = "bpf")]
     solana_program::log::sol_log_compute_units();
-    let elapsed = now.elapsed().subsec_nanos();
-    solana_program::msg!("elapsed time ns {:?} ", elapsed);
+    // let elapsed = now.elapsed().subsec_nanos();
+    // solana_program::msg!("elapsed time ns {:?} ", elapsed);
 
     Capture::Exit((ExitReason::Succeed(evm::ExitSucceed::Returned), return_value))
 }
